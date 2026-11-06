@@ -1,0 +1,7 @@
+\babel@toc {french}{}\relax 
+\beamer@sectionintoc {1}{Contexte}{3}{0}{1}
+\beamer@sectionintoc {2}{Donn\'ees}{4}{0}{2}
+\beamer@sectionintoc {3}{M\'ethodologie}{8}{0}{3}
+\beamer@sectionintoc {4}{R\'egression}{10}{0}{4}
+\beamer@sectionintoc {5}{Classification}{14}{0}{5}
+\beamer@sectionintoc {6}{Bonus \& Conclusion}{19}{0}{6}

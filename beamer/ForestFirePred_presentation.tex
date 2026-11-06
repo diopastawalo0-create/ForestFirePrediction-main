@@ -1,0 +1,357 @@
+% ForestFirePred_presentation.tex
+% Beamer presentation template based on ForestFirePred.ipynb analyses
+
+\documentclass[aspectratio=169,11pt]{beamer}
+
+% Design (built-in, higher visual impact)
+\usetheme{Warsaw}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamerfont{title}{series=\bfseries,size=\LARGE}
+\setbeamerfont{subtitle}{series=\mdseries,size=\large}
+\setbeamerfont{frametitle}{series=\bfseries}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage{ifthen}
+
+% Ignore tiny box overflows (theme-dependent, visually negligible)
+\AtBeginDocument{\vfuzz=2pt\relax\hfuzz=2pt\relax}
+
+% Color palette (simple + punchy)
+\definecolor{FFDark}{HTML}{0B1F3A}
+\definecolor{FFAccent}{HTML}{4169E1}
+\setbeamercolor{structure}{fg=FFAccent}
+\setbeamercolor{frametitle}{bg=FFDark,fg=white}
+\setbeamercolor{title}{fg=white}
+\setbeamercolor{subtitle}{fg=white}
+\setbeamercolor{title page}{bg=FFDark,fg=white}
+\setbeamercolor{section in toc}{fg=FFDark}
+
+% Math notation (cleaner, course-like)
+\newcommand{\Area}{\ensuremath{\mathrm{area}}}
+\newcommand{\AreaCol}{\texttt{area}}
+\newcommand{\LogArea}{\ensuremath{\log\!\bigl(1+\Area\bigr)}}
+\DeclareRobustCommand{\RMSE}{\ensuremath{\operatorname{RMSE}}}
+\DeclareRobustCommand{\MAE}{\ensuremath{\operatorname{MAE}}}
+
+% Keep images inside the slide box (avoid overflow / shifting layouts)
+\setkeys{Gin}{keepaspectratio}
+\newcommand{\FFigure}[2][]{%
+  \centering\includegraphics[width=\linewidth,height=0.58\textheight,#1]{#2}%
+}
+\newcommand{\FFigureTwo}[3][]{%
+  \begin{columns}[T,onlytextwidth]
+    \column{0.49\textwidth}
+      \centering\includegraphics[width=\linewidth,height=0.46\textheight,#1]{#2}
+    \column{0.49\textwidth}
+      \centering\includegraphics[width=\linewidth,height=0.46\textheight,#1]{#3}
+  \end{columns}
+}
+
+\newcommand{\GroupName}{Groupe ForestFire}
+
+\title[Forest Fires]{TP / Mini-projet — Pr\'ediction des feux de for\^et}
+\subtitle{R\'egression de la surface br\^ul\'ee et variante classification}
+\author[\GroupName]{\texorpdfstring{\GroupName\\[0.2em]
+Alban Komla HENOVI\\
+Asta Walo DIOP\\
+Arthur BOMEMO Wal\'e}{\GroupName}}
+\institute{Cours Python — Semestre 1}
+\date{\today}
+
+% PDF metadata (avoid line breaks in PDF strings)
+\hypersetup{pdfauthor={\GroupName},pdftitle={Forest Fire Prediction}}
+\pdfstringdefDisableCommands{\def\\{ } }
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+\begin{frame}{Plan}
+  \begin{enumerate}
+    \item Contexte scientifique (FWI)
+    \item Donn\'ees et EDA (distribution, corr\'elations)
+    \item M\'ethodologie (pr\'e-traitements, split, validation)
+    \item R\'egression : r\'esultats et discussion
+    \item Classification binaire : r\'esultats et discussion
+    \item Bonus et conclusion
+  \end{enumerate}
+\end{frame}
+
+\section{Contexte}
+
+\begin{frame}{Contexte : indices FWI}
+  Les indices \textbf{FWI (Fire Weather Index)} r\'esument l'\og \`etat du combustible\fg{} et le danger de propagation :
+  \begin{itemize}
+    \item \texttt{FFMC} : humidit\'e des combustibles fins (court terme)
+    \item \texttt{DMC} : humidit\'e couche organique (moyen terme)
+    \item \texttt{DC} : s\'echeresse profonde (long terme)
+    \item \texttt{ISI} : potentiel de propagation initiale (d\'epend du vent)
+  \end{itemize}
+  Objectif : pr\'edire la surface br\^ul\'ee $\Area$ (colonne \AreaCol, en hectares) \`a partir de la m\'et\'eo et des indices FWI.
+\end{frame}
+
+\section{Donn\'ees}
+
+\begin{frame}{Donn\'ees : Forest Fires (\texttt{forestfires.csv})}
+  \begin{itemize}
+    \item Cible : \AreaCol (surface br\^ul\'ee $\Area$, en ha)
+    \item Variables : coordonn\'ees (\texttt{X,Y}), calendrier (\texttt{month,day}), FWI (\texttt{FFMC,DMC,DC,ISI}), m\'et\'eo (\texttt{temp,RH,wind,rain})
+    \item Particularit\'e : beaucoup de z\'eros sur \AreaCol + quelques valeurs extr\^emes
+  \end{itemize}
+
+  \vspace{0.6em}
+  \textit{Remarque :} \texttt{month} et \texttt{day} sont encod\'es en one-hot.
+\end{frame}
+
+\begin{frame}{EDA : distribution de \AreaCol et effet de \(\LogArea\)}
+  \begin{itemize}
+    \item \AreaCol est tr\`es asym\'etrique (beaucoup de z\'eros)
+    \item La transformation \(\LogArea\) rend la cible plus exploitable pour la mod\'elisation
+  \end{itemize}
+
+  \vspace{0.4em}
+  \IfFileExists{figures/dist_area_log.png}{
+    \FFigure{figures/dist_area_log.png}
+  }{\textit{(Figure non disponible : ex\'ecuter la cellule Export Beamer)} }
+\end{frame}
+
+\begin{frame}{Transformation de la cible}
+  Comme la distribution est tr\`es asym\'etrique, on utilise :
+  \[
+    y = \LogArea
+  \]
+  \begin{itemize}
+    \item Stabilise l'apprentissage (moins domin\'e par les extr\^emes)
+    \item G\`ere naturellement \(\Area=0\)
+    \item Les m\'etriques (\RMSE/\MAE) sont rapport\'ees en espace log, coh\'erent avec l'entra\^inement
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{EDA : relations simples (temp\'erature / vent)}
+  \begin{itemize}
+    \item Pearson : relation lin\'eaire (sensible aux outliers)
+    \item Spearman : relation monotone (plus robuste)
+  \end{itemize}
+
+  \vspace{0.3em}
+  \textit{Observation :} corr\'elations souvent faibles (ph\'enom\`ene multi-factoriel et bruit\'e).
+
+  \vspace{0.4em}
+  \textbf{Illustration :} nuages de points export\'es depuis le notebook.
+  
+  \vspace{0.3em}
+  \IfFileExists{figures/scatter_temp_area.png}{
+    \IfFileExists{figures/scatter_wind_area.png}{
+      \FFigureTwo{figures/scatter_temp_area.png}{figures/scatter_wind_area.png}
+    }{\FFigure{figures/scatter_temp_area.png}}
+  }{\textit{(Figures non disponibles : ex\'ecuter la cellule Export Beamer)} }
+\end{frame}
+
+\section{M\'ethodologie}
+
+\begin{frame}{M\'ethodologie : pr\'e-traitements et pipeline}
+  \begin{itemize}
+    \item Variables num\'eriques : \textbf{standardisation} (important pour SVR/KNN)
+    \item Variables cat\'egorielles (\texttt{month, day}) : \textbf{one-hot encoding}
+    \item Impl\'ementation : \texttt{Pipeline} + \texttt{ColumnTransformer} (scikit-learn)
+  \end{itemize}
+
+  \vspace{0.4em}
+  Avantage : pr\'e-traitement inclus dans la validation et la recherche d'hyperparam\`etres (pas de fuite d'information).
+\end{frame}
+
+\begin{frame}{M\'ethodologie : split, validation et m\'etriques}
+  \begin{itemize}
+    \item Split train/test : 80\% / 20\%
+    \item \textbf{Validation crois\'ee 10-fold} sur le train (robustesse)
+    \item R\'egression : \RMSE/\MAE sur \(\LogArea\)
+    \item Classification : Accuracy + Precision/Recall/F1 (split stratifi\'e)
+  \end{itemize}
+\end{frame}
+
+\section{R\'egression}
+
+\begin{frame}{Protocole exp\'erimental (r\'egression)}
+  \begin{itemize}
+    \item Baseline : \texttt{DummyRegressor} (m\'ediane)
+    \item Mod\`eles : Linear Regression, SVR (RBF), KNN Regressor
+    \item S\'election d'hyperparam\`etres : \texttt{GridSearchCV} avec \textbf{CV=10}
+    \item Score optimis\'e : \texttt{neg\_root\_mean\_squared\_error}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{R\'egression : GridSearch (SVR / KNN)}
+  \begin{itemize}
+    \item SVR (RBF) : recherche sur \(C\), \(\gamma\), \(\epsilon\)
+    \item KNN : recherche sur \texttt{n\_neighbors}, \texttt{weights}, distance (\(p=1/2\))
+    \item Objectif : am\'eliorer la performance vs baseline, sans sur-apprentissage
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{R\'esultats r\'egression (\RMSE/\MAE sur \(\LogArea\))}
+  \textit{Note :} la cellule \textbf{Export Beamer} du notebook g\'en\`ere automatiquement ce tableau.
+
+  \vspace{0.6em}
+  \begin{table}
+    \centering
+    \small
+    \IfFileExists{tables/regression_table.tex}{
+      \input{tables/regression_table.tex}
+    }{
+      \begin{tabular}{lcc}
+        \toprule
+        Mod\`ele & RMSE (test, log) & CV 10-fold RMSE (log) \\
+        \midrule
+        DummyRegressor (median) & \textit{...} & \textit{...} \\
+        LinearRegression & \textit{...} & \textit{...} \\
+        SVR (best) & \textit{...} & \textit{...} \\
+        KNNRegressor (best) & \textit{...} & \textit{...} \\
+        \bottomrule
+      \end{tabular}
+    }
+  \end{table}
+
+  \vspace{0.2em}
+  Message cl\'e : comparer \`a la baseline et juger la stabilit\'e via la CV.
+\end{frame}
+
+\begin{frame}{Discussion r\'egression (interpr\'etation)}
+  \begin{itemize}
+    \item Les mod\`eles non-lin\'eaires peuvent r\'eduire le RMSE (log), mais les gains restent souvent limit\'es
+    \item La CV permet d'\'evaluer la stabilit\'e : forte variabilit\'e \(\Rightarrow\) risque de sur-apprentissage
+    \item Les \textbf{\'ev\'enements extr\^emes} (grands feux) sont rares \(\Rightarrow\) pr\'ediction pr\'ecise difficile
+  \end{itemize}
+\end{frame}
+
+\section{Classification}
+
+\begin{frame}{Variante classification binaire}
+  On transforme :
+  \begin{itemize}
+    \item Classe 1 : $\Area>0$ (un feu)
+    \item Classe 0 : $\Area=0$ (aucun feu)
+  \end{itemize}
+
+  \vspace{0.6em}
+  \begin{itemize}
+    \item Split stratifi\'e train/test
+    \item M\'etriques : Accuracy + Precision/Recall/F1
+    \item CV : \textbf{Stratified 10-fold} sur le train
+    \item Mod\`eles : Dummy, Logistic Regression, SVC (RBF), KNN
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Classification : enjeu et d\'es\'equilibre}
+  \begin{itemize}
+    \item La cible $\Area>0$ peut \^etre d\'es\'equilibr\'ee (beaucoup de z\'eros)
+    \item On privil\'egie F1 / Precision / Recall plut\^ot que l'Accuracy seule
+    \item CV : \textbf{Stratified 10-fold} sur le train
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{R\'esultats classification (test + CV 10-fold)}
+  \textit{Note :} la cellule \textbf{Export Beamer} g\'en\`ere aussi ce tableau.
+
+  \vspace{0.2em}
+  \begin{table}
+    \centering
+    \scriptsize
+    \IfFileExists{tables/classification_table.tex}{
+      \input{tables/classification_table.tex}
+    }{
+      \begin{tabular}{lcc}
+        \toprule
+        Mod\`ele & F1 (test) & CV 10-fold F1 \\
+        \midrule
+        DummyClassifier (most\_frequent) & \textit{...} & \textit{...} \\
+        LogisticRegression & \textit{...} & \textit{...} \\
+        SVC (rbf) & \textit{...} & \textit{...} \\
+        KNNClassifier & \textit{...} & \textit{...} \\
+        \bottomrule
+      \end{tabular}
+    }
+  \end{table}
+
+  \vspace{0.2em}
+  \textbf{Option :} matrice de confusion export\'ee.
+  
+  \IfFileExists{figures/confusion_matrix_best.png}{
+    \FFigure[height=0.30\textheight]{figures/confusion_matrix_best.png}
+  }{}
+\end{frame}
+
+\begin{frame}{Matrice de confusion (meilleur mod\`ele)}
+  \IfFileExists{figures/confusion_matrix_best.png}{
+    \FFigure[height=0.68\textheight]{figures/confusion_matrix_best.png}
+  }{\textit{(Figure non disponible : ex\'ecuter la cellule Export Beamer)} }
+
+  \vspace{0.3em}
+  Lecture : compromis faux positifs / faux n\'egatifs \(\Rightarrow\) choix de seuil selon l'objectif (Recall vs Precision).
+\end{frame}
+
+\begin{frame}{Discussion classification}
+  \begin{itemize}
+    \item Un bon F1 signifie un compromis correct entre d\'etection (Recall) et fausses alertes (Precision)
+    \item La matrice de confusion permet de visualiser les erreurs syst\'ematiques
+    \item Limite : la pr\'ediction \`a partir d'indices m\'et\'eo/FWI reste bruit\'ee (facteurs non observ\'es : intervention, topographie fine, etc.)
+  \end{itemize}
+\end{frame}
+
+\section{Bonus \& Conclusion}
+
+\begin{frame}{Bonus : s\'election de variables (top-4)}
+  Approche (dans le notebook) : \textbf{Permutation Importance} sur un split interne du train.
+  \begin{itemize}
+    \item Objectif : garder seulement 4 variables pertinentes
+    \item R\'e-entra\^iner un mod\`ele simple (ex: Linear Regression) avec ces variables
+  \end{itemize}
+
+  \vspace{0.4em}
+  \IfFileExists{bonus_auto.tex}{\input{bonus_auto.tex}}{\textbf{\`A compl\'eter :} liste des top-4 trouv\'ees.}
+\end{frame}
+
+\begin{frame}{Bonus : avec vs sans transformation log}
+  Comparaison \`a interpr\'eter avec prudence :
+  \begin{itemize}
+    \item Sans log : l'erreur (en ha) est domin\'ee par les grands feux
+    \item Avec log : apprentissage plus stable ; reconversion \(\widehat{\Area}=\exp(\hat{y})-1\) potentiellement biais\'ee
+  \end{itemize}
+
+  \vspace{0.4em}
+  \textbf{\`A compl\'eter :} RMSE en hectares pour les deux variantes (cf. cellule Bonus 2).
+\end{frame}
+
+\begin{frame}{Conclusion}
+  \begin{itemize}
+    \item Pr\'edire $\Area$ (colonne \AreaCol) est difficile (beaucoup de z\'eros + extr\^emes)
+    \item \(\LogArea\) am\'eliore la stabilit\'e pour la r\'egression
+    \item Les mod\`eles non-lin\'eaires peuvent aider, mais la CV 10-fold est essentielle pour juger la robustesse
+    \item En classification, l'Accuracy seule est insuffisante : regarder F1 + matrice de confusion
+  \end{itemize}
+
+  \vspace{0.6em}
+  \textit{Limites / pistes :} features saisonni\`eres, ensembles, calibration/seuils (prioriser recall vs precision).
+\end{frame}
+
+\begin{frame}{R\'ef\'erences et reproductibilit\'e}
+  \begin{itemize}
+    \item Notebook d'analyse : \texttt{ForestFirePred.ipynb}
+    \item Donn\'ees : \texttt{forestfires.csv}
+    \item Code : scikit-learn (pipelines, GridSearchCV, cross\_validate)
+  \end{itemize}
+
+  \vspace{0.6em}
+  Pour compiler : \texttt{pdflatex ForestFirePred\_presentation.tex}
+\end{frame}
+
+\end{document}
